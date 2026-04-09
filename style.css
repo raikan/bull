@@ -1,0 +1,93 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+  background: #fdf6ec;
+  color: #333;
+  padding: 24px;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+header h1 {
+  font-size: 2rem;
+  color: #c0392b;
+}
+
+header p {
+  font-size: 1rem;
+  color: #777;
+  margin-top: 8px;
+}
+
+.menu-table {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  border-collapse: collapse;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.menu-table thead tr {
+  background: #c0392b;
+  color: #fff;
+}
+
+.menu-table thead th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 0.95rem;
+}
+
+.menu-table tbody tr:nth-child(even) {
+  background: #fef9f5;
+}
+
+.menu-table tbody tr:hover {
+  background: #fde8e4;
+}
+
+.menu-table tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0e0d6;
+  font-size: 0.95rem;
+  vertical-align: middle;
+}
+
+.meal-time {
+  font-weight: bold;
+  color: #c0392b;
+  white-space: nowrap;
+}
+
+.meal-name {
+  font-weight: bold;
+}
+
+.meal-desc {
+  color: #777;
+  font-size: 0.85rem;
+}
+
+.meal-kcal {
+  text-align: right;
+  white-space: nowrap;
+  color: #555;
+}
+
+footer {
+  text-align: center;
+  margin-top: 32px;
+  font-size: 0.8rem;
+  color: #aaa;
+}
