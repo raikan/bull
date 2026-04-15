@@ -1,0 +1,48 @@
+name: Notify Daily Menu
+
+on:
+  schedule:
+    - cron: "0 22 * * *"
+  workflow_dispatch:
+    inputs:
+      menu_date:
+        description: "Target date (YYYY-MM-DD)"
+        required: false
+        type: string
+      menu_pdf_url:
+        description: "Override PDF URL"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Notify today's menu
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_TO: ${{ secrets.LINE_TO }}
+          MENU_PDF_URL: ${{ inputs.menu_pdf_url || secrets.MENU_PDF_URL }}
+          MENU_TIMEZONE: ${{ secrets.MENU_TIMEZONE || 'Asia/Tokyo' }}
+          INPUT_MENU_DATE: ${{ inputs.menu_date }}
+        run: |
+          set -eu
+          if [ -n "${INPUT_MENU_DATE}" ]; then
+            python scripts/notify_daily_menu.py --date "${INPUT_MENU_DATE}"
+          else
+            python scripts/notify_daily_menu.py
+          fi
