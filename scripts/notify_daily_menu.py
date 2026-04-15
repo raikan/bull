@@ -13,8 +13,6 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
-from pypdf import PdfReader
-
 DATE_SPLITTER_PATTERN = re.compile(r"(?<!\d)(?:\d{1,2}/\d{1,2}|\d{1,2}月\d{1,2}日|\d{1,2}日)(?:\s*[（(][月火水木金土日][）)])?")
 
 
@@ -51,6 +49,8 @@ def download_pdf(url: str, destination: Path) -> None:
 
 
 def extract_pdf_text(pdf_path: Path) -> str:
+    from pypdf import PdfReader
+
     reader = PdfReader(str(pdf_path))
     pages = []
     for page in reader.pages:
@@ -116,7 +116,7 @@ def collect_menu(lines: list[str], index: int, target_date: date, max_lines: int
     collected: list[str] = []
 
     first_line = strip_date_prefix(lines[index], patterns)
-    if first_line and not all(pattern.fullmatch(lines[index]) for pattern in patterns):
+    if first_line and first_line != lines[index]:
         collected.append(first_line)
 
     cursor = index + 1
