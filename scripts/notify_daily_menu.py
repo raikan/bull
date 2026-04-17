@@ -35,6 +35,10 @@ def require_env(name: str) -> str:
     return value
 
 
+def optional_env(name: str) -> str:
+    return os.getenv(name, "").strip()
+
+
 def download_pdf(url: str, destination: Path) -> None:
     request = Request(url, headers={"User-Agent": "bull-menu-notifier/1.0"})
     try:
@@ -46,6 +50,13 @@ def download_pdf(url: str, destination: Path) -> None:
         raise RuntimeError(f"Failed to fetch PDF: HTTP {exc.code}") from exc
     except URLError as exc:
         raise RuntimeError(f"Failed to fetch PDF: {exc.reason}") from exc
+
+
+def resolve_local_pdf_path(local_pdf_path: str) -> Path | None:
+    candidate = Path(local_pdf_path)
+    if candidate.is_file():
+        return candidate
+    return None
 
 
 def extract_pdf_text(pdf_path: Path) -> str:
@@ -145,6 +156,15 @@ def extract_menu_text(text: str, target_date: date, max_lines: int = 3) -> str:
     raise RuntimeError(f"Menu for {target_date.isoformat()} was not found in the PDF.")
 
 
+def format_menu_message(target_date: date, menu: str) -> str:
+    weekday = "月火水木金土日"[target_date.weekday()]
+    menu_lines = [line.strip().lstrip("・- ") for line in menu.splitlines() if line.strip()]
+    if not menu_lines:
+        raise RuntimeError("Menu text is empty.")
+    body = "\n".join(f"・{line}" for line in menu_lines)
+    return f"【今日の給食】{target_date.strftime('%Y-%m-%d')}（{weekday}）\n{body}"
+
+
 def send_line_message(channel_access_token: str, message: str) -> None:
     payload = {
         "messages": [{"type": "text", "text": message[:5000]}],
@@ -172,16 +192,23 @@ def main() -> int:
     args = parse_args()
     timezone_name = os.getenv("MENU_TIMEZONE", "Asia/Tokyo")
     target_date = resolve_target_date(args.target_date, timezone_name)
-    pdf_url = require_env("MENU_PDF_URL")
+    pdf_url = optional_env("MENU_PDF_URL")
+    local_pdf_path = os.getenv("MENU_PDF_PATH", "menus/latest.pdf")
     channel_access_token = require_env("LINE_CHANNEL_ACCESS_TOKEN")
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        pdf_path = Path(temp_dir) / "menu.pdf"
-        download_pdf(pdf_url, pdf_path)
+    pdf_path = resolve_local_pdf_path(local_pdf_path)
+    if pdf_path is not None:
         text = extract_pdf_text(pdf_path)
+    elif pdf_url:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            downloaded_pdf_path = Path(temp_dir) / "menu.pdf"
+            download_pdf(pdf_url, downloaded_pdf_path)
+            text = extract_pdf_text(downloaded_pdf_path)
+    else:
+        raise RuntimeError("No PDF source was found. Set MENU_PDF_URL or commit a PDF to menus/latest.pdf.")
 
     menu = extract_menu_text(text, target_date)
-    message = f"【今日の給食】{target_date.strftime('%Y-%m-%d')}\n{menu}"
+    message = format_menu_message(target_date, menu)
     send_line_message(channel_access_token, message)
     return 0
 
