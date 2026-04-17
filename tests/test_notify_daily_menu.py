@@ -118,6 +118,25 @@ class LayoutMealParsingTests(unittest.TestCase):
         with self.assertRaises(notify_daily_menu.MenuNotFoundError):
             notify_daily_menu.extract_meal_sections_from_layout_lines(lines, date(2026, 4, 20))
 
+    def test_extracts_items_in_correct_sections_when_afternoon_snack_starts_on_first_line(self) -> None:
+        lines = [
+            "     蒸しかぼちゃ         ご飯                      パイナップル                 ヨーグルト(苺)       牛乳、木綿豆腐、豚肉、減塩み           米、ワンタン、ごま油、三温糖、片          かぼちゃ、干ししいたけ、水菜、人",
+            "17 金 牛乳             ワンタンスープ                 ほうじ茶                   ウエハース          そ、しらす、ヨーグルト（苺)           栗粉、ウエハース                  参、長ねぎ、しょうが、にんにく、も         ぽたぽた焼き",
+            "                    麻婆豆腐                                           ほう じ茶                                                              やし、ほうれん草、パイナップル           ほうじ茶",
+            "                    カリカリしらすともやしの和え物",
+            "     ハイハイン          焼きそば                                           ビスケット          牛乳、豚肉                    ハイハイン、蒸し中華麺、油、三温          キャベツ、玉ねぎ、人参、青のり、",
+            "18 土 牛乳             かぼちゃとしめじの甘辛和え                                  牛乳                                      糖、マリービスケット                南瓜、しめじ、オレンジ               味しらべ",
+            "                    オレンジ                                                                                                                                       ほうじ茶",
+            "                    ほうじ茶",
+        ]
+
+        sections = notify_daily_menu.extract_meal_sections_from_layout_lines(lines, date(2026, 4, 18))
+
+        self.assertEqual(sections["朝おやつ"], ["ハイハイン", "牛乳"])
+        self.assertNotIn("ビスケット", sections["昼食"])
+        self.assertEqual(sections["午後おやつ"][:2], ["ビスケット", "牛乳"])
+        self.assertEqual(sections["延長おやつ"], ["味しらべ", "ほうじ茶"])
+
 
 class ResolvePdfPathTests(unittest.TestCase):
     def test_prefers_local_pdf_when_present(self) -> None:

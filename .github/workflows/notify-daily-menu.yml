@@ -2,7 +2,7 @@ name: Notify Daily Menu
 
 on:
   schedule:
-    - cron: "59 21 * * *"
+    - cron: "30 21 * * *"
   workflow_dispatch:
     inputs:
       menu_date:
