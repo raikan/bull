@@ -28,13 +28,19 @@ LAYOUT_COLUMN_SLICES = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Notify today's lunch menu from a PDF.")
-    parser.add_argument("--date", dest="target_date", help="Target date in YYYY-MM-DD format.")
+    parser.add_argument("--date", dest="target_date", help="Target date in YYYY-MM-DD or YYYYMMDD format.")
     return parser.parse_args()
 
 
 def resolve_target_date(target_date: str | None, timezone_name: str) -> date:
     if target_date:
-        return datetime.strptime(target_date, "%Y-%m-%d").date()
+        normalized = target_date.strip()
+        for fmt in ("%Y-%m-%d", "%Y%m%d"):
+            try:
+                return datetime.strptime(normalized, fmt).date()
+            except ValueError:
+                continue
+        raise RuntimeError("Date must be in YYYY-MM-DD or YYYYMMDD format.")
     return datetime.now(ZoneInfo(timezone_name)).date()
 
 

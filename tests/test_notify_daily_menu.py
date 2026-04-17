@@ -75,6 +75,22 @@ class FormatMenuMessageTests(unittest.TestCase):
         )
 
 
+class ResolveTargetDateTests(unittest.TestCase):
+    def test_accepts_dashed_date(self) -> None:
+        resolved = notify_daily_menu.resolve_target_date("2026-04-16", "Asia/Tokyo")
+
+        self.assertEqual(resolved, date(2026, 4, 16))
+
+    def test_accepts_compact_date(self) -> None:
+        resolved = notify_daily_menu.resolve_target_date("20260416", "Asia/Tokyo")
+
+        self.assertEqual(resolved, date(2026, 4, 16))
+
+    def test_rejects_invalid_date_format(self) -> None:
+        with self.assertRaises(RuntimeError):
+            notify_daily_menu.resolve_target_date("2026/04/16", "Asia/Tokyo")
+
+
 class LayoutMealParsingTests(unittest.TestCase):
     def test_extracts_four_meal_sections_from_layout_lines(self) -> None:
         lines = [
