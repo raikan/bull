@@ -17,6 +17,8 @@ DATE_SPLITTER_PATTERN = re.compile(r"(?<!\d)(?:\d{1,2}/\d{1,2}|\d{1,2}月\d{1,2}
 LAYOUT_DATE_PATTERN = re.compile(r"^\s*(\d{1,2})\s+([月火水木金土日])\b")
 JAPANESE_SPACE_PATTERN = re.compile(r"(?<=[ぁ-んァ-ン一-龠])\s+(?=[ぁ-んァ-ン一-龠])")
 MEAL_SECTION_ORDER = ("朝おやつ", "昼食", "午後おやつ", "延長おやつ")
+SNACK_ITEMS = {"ビスケット", "クッキー", "ウエハース", "せんべい", "パイ", "サブレ", "ラスク", "味しらべ", "ぽたぽた焼き"}
+BEVERAGE_ITEMS = {"牛乳", "ほうじ茶", "麦茶", "お茶"}
 LAYOUT_COLUMN_SLICES = {
     "朝おやつ": (5, 20),
     "昼食": (20, 44),
@@ -202,6 +204,25 @@ def split_layout_segment(segment: str) -> list[str]:
     return [item for item in items if item]
 
 
+def is_beverage_item(item: str) -> bool:
+    return item.strip() in BEVERAGE_ITEMS
+
+
+def is_snack_item(item: str) -> bool:
+    return item.strip() in SNACK_ITEMS
+
+
+def remove_first(items: list[str], target: str) -> list[str]:
+    removed = False
+    updated: list[str] = []
+    for item in items:
+        if not removed and item == target:
+            removed = True
+            continue
+        updated.append(item)
+    return updated
+
+
 def extract_meal_sections_from_layout_lines(lines: list[str], target_date: date) -> dict[str, list[str]]:
     target_weekday = "月火水木金土日"[target_date.weekday()]
     date_line_indexes = [
@@ -223,6 +244,7 @@ def extract_meal_sections_from_layout_lines(lines: list[str], target_date: date)
     block_start = max(0, date_line_index - 1)
     block_end = max(block_start, next_date_line_index - 1)
     block_lines = lines[block_start:block_end]
+    first_line_afternoon_candidates: list[str] = []
 
     sections = {name: [] for name in MEAL_SECTION_ORDER}
     for line_index, line in enumerate(block_lines):
@@ -232,6 +254,9 @@ def extract_meal_sections_from_layout_lines(lines: list[str], target_date: date)
             )
             sections["昼食"].extend(
                 split_layout_segment(line[LAYOUT_COLUMN_SLICES["昼食"][0] : LAYOUT_COLUMN_SLICES["3色分類"][0]])
+            )
+            first_line_afternoon_candidates = split_layout_segment(
+                line[LAYOUT_COLUMN_SLICES["午後おやつ"][0] : LAYOUT_COLUMN_SLICES["午後おやつ"][1]]
             )
             sections["延長おやつ"].extend(split_layout_segment(line[LAYOUT_COLUMN_SLICES["延長おやつ"][0] :]))
             continue
@@ -247,6 +272,16 @@ def extract_meal_sections_from_layout_lines(lines: list[str], target_date: date)
             if item not in deduped:
                 deduped.append(item)
         sections[section_name] = deduped
+
+    afternoon_has_non_beverage = any(not is_beverage_item(item) for item in sections["午後おやつ"])
+    if not afternoon_has_non_beverage:
+        moved: list[str] = []
+        for item in first_line_afternoon_candidates:
+            if is_snack_item(item) and item in sections["昼食"] and item not in sections["午後おやつ"]:
+                sections["昼食"] = remove_first(sections["昼食"], item)
+                moved.append(item)
+        if moved:
+            sections["午後おやつ"] = moved + sections["午後おやつ"]
 
     return sections
 
