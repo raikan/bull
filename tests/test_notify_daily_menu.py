@@ -105,8 +105,8 @@ class LayoutMealParsingTests(unittest.TestCase):
         sections = notify_daily_menu.extract_meal_sections_from_layout_lines(lines, date(2026, 4, 17))
 
         self.assertEqual(sections["朝おやつ"], ["蒸しかぼちゃ", "牛乳"])
-        self.assertEqual(sections["昼食"], ["ご飯", "パイナップル", "ヨーグルト(苺)", "ワンタンスープ", "麻婆豆腐", "カリカリしらすともやしの和え物"])
-        self.assertEqual(sections["午後おやつ"], ["ほうじ茶", "ウエハース"])
+        self.assertEqual(sections["昼食"], ["ご飯", "パイナップル", "ワンタンスープ", "麻婆豆腐", "カリカリしらすともやしの和え物"])
+        self.assertEqual(sections["午後おやつ"], ["ヨーグルト(苺)", "ほうじ茶", "ウエハース"])
         self.assertEqual(sections["延長おやつ"], ["ぽたぽた焼き", "ほうじ茶"])
 
     def test_raises_menu_not_found_when_date_is_missing(self) -> None:
