@@ -273,6 +273,15 @@ def extract_meal_sections_from_layout_lines(lines: list[str], target_date: date)
                 deduped.append(item)
         sections[section_name] = deduped
 
+    moved_from_first_line: list[str] = []
+    if first_line_afternoon_candidates:
+        candidate = first_line_afternoon_candidates[-1]
+        if candidate in sections["昼食"] and candidate not in sections["午後おやつ"]:
+            sections["昼食"] = remove_first(sections["昼食"], candidate)
+            moved_from_first_line.append(candidate)
+    if moved_from_first_line:
+        sections["午後おやつ"] = moved_from_first_line + sections["午後おやつ"]
+
     afternoon_has_non_beverage = any(not is_beverage_item(item) for item in sections["午後おやつ"])
     if not afternoon_has_non_beverage:
         moved: list[str] = []
