@@ -145,13 +145,12 @@ def extract_menu_text(text: str, target_date: date, max_lines: int = 3) -> str:
     raise RuntimeError(f"Menu for {target_date.isoformat()} was not found in the PDF.")
 
 
-def send_line_message(channel_access_token: str, recipient: str, message: str) -> None:
+def send_line_message(channel_access_token: str, message: str) -> None:
     payload = {
-        "to": recipient,
         "messages": [{"type": "text", "text": message[:5000]}],
     }
     request = Request(
-        "https://api.line.me/v2/bot/message/push",
+        "https://api.line.me/v2/bot/message/broadcast",
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
@@ -175,7 +174,6 @@ def main() -> int:
     target_date = resolve_target_date(args.target_date, timezone_name)
     pdf_url = require_env("MENU_PDF_URL")
     channel_access_token = require_env("LINE_CHANNEL_ACCESS_TOKEN")
-    recipient = require_env("LINE_TO")
 
     with tempfile.TemporaryDirectory() as temp_dir:
         pdf_path = Path(temp_dir) / "menu.pdf"
@@ -184,7 +182,7 @@ def main() -> int:
 
     menu = extract_menu_text(text, target_date)
     message = f"【今日の給食】{target_date.strftime('%Y-%m-%d')}\n{menu}"
-    send_line_message(channel_access_token, recipient, message)
+    send_line_message(channel_access_token, message)
     return 0
 
 

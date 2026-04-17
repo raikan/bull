@@ -35,7 +35,6 @@ jobs:
       - name: Notify today's menu
         env:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
-          LINE_TO: ${{ secrets.LINE_TO }}
           MENU_PDF_URL: ${{ inputs.menu_pdf_url || secrets.MENU_PDF_URL }}
           MENU_TIMEZONE: ${{ secrets.MENU_TIMEZONE || 'Asia/Tokyo' }}
           INPUT_MENU_DATE: ${{ inputs.menu_date }}

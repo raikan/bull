@@ -2,6 +2,8 @@
 
 GitHub Actions で毎朝 7 時に PDF の給食献立表から当日の献立を抽出し、LINE に通知する仕組みです。
 
+LINE への通知は、LINE公式アカウントを友だち追加している相手全員へのブロードキャスト配信です。
+
 ## 構成
 
 - `.github/workflows/notify-daily-menu.yml`
@@ -25,10 +27,10 @@ LINE Notify は終了済みのため、LINE Messaging API を使います。
 
 - `LINE_CHANNEL_ACCESS_TOKEN`
   - Messaging API のチャネルアクセストークン
-- `LINE_TO`
-  - Push Message の送信先 ID（ユーザー / グループ / ルーム）
 - `MENU_PDF_URL`
   - 月次献立 PDF の URL
+
+`LINE_TO` は不要です。この実装は Push Message ではなく Broadcast API を使って、友だち追加済みの相手全員に配信します。
 
 必要に応じて以下も設定できます。
 
