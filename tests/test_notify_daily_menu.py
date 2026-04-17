@@ -38,7 +38,7 @@ class ExtractMenuTextTests(unittest.TestCase):
         self.assertEqual(menu, "ごはん\n鶏の唐揚げ\n味噌汁")
 
     def test_raises_when_date_is_missing(self) -> None:
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(notify_daily_menu.MenuNotFoundError):
             notify_daily_menu.extract_menu_text("4/14 ハヤシライス", date(2026, 4, 15))
 
 
@@ -108,6 +108,15 @@ class LayoutMealParsingTests(unittest.TestCase):
         self.assertEqual(sections["昼食"], ["ご飯", "パイナップル", "ヨーグルト(苺)", "ワンタンスープ", "麻婆豆腐", "カリカリしらすともやしの和え物"])
         self.assertEqual(sections["午後おやつ"], ["ほうじ茶", "ウエハース"])
         self.assertEqual(sections["延長おやつ"], ["ぽたぽた焼き", "ほうじ茶"])
+
+    def test_raises_menu_not_found_when_date_is_missing(self) -> None:
+        lines = [
+            "17 金 牛乳             ワンタンスープ                 ほうじ茶                   ウエハース",
+            "18 土 牛乳             かぼちゃとしめじの甘辛和え                                  牛乳",
+        ]
+
+        with self.assertRaises(notify_daily_menu.MenuNotFoundError):
+            notify_daily_menu.extract_meal_sections_from_layout_lines(lines, date(2026, 4, 20))
 
 
 class ResolvePdfPathTests(unittest.TestCase):

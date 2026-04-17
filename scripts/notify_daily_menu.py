@@ -26,6 +26,10 @@ LAYOUT_COLUMN_SLICES = {
 }
 
 
+class MenuNotFoundError(RuntimeError):
+    pass
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Notify today's lunch menu from a PDF.")
     parser.add_argument("--date", dest="target_date", help="Target date in YYYY-MM-DD or YYYYMMDD format.")
@@ -180,7 +184,7 @@ def extract_menu_text(text: str, target_date: date, max_lines: int = 3) -> str:
                 if menu:
                     return menu
 
-    raise RuntimeError(f"Menu for {target_date.isoformat()} was not found in the PDF.")
+    raise MenuNotFoundError(f"Menu for {target_date.isoformat()} was not found in the PDF.")
 
 
 def normalize_layout_item(item: str) -> str:
@@ -209,7 +213,7 @@ def extract_meal_sections_from_layout_lines(lines: list[str], target_date: date)
     ]
 
     if not date_line_indexes:
-        raise RuntimeError(f"Menu for {target_date.isoformat()} was not found in the PDF layout.")
+        raise MenuNotFoundError(f"Menu for {target_date.isoformat()} was not found in the PDF layout.")
 
     date_line_index = date_line_indexes[0]
     next_date_line_index = next(
@@ -311,7 +315,12 @@ def main() -> int:
     else:
         raise RuntimeError("No PDF source was found. Set MENU_PDF_URL or commit a PDF to menus/latest.pdf.")
 
-    sections = extract_meal_sections_from_layout_lines(layout_lines, target_date)
+    try:
+        sections = extract_meal_sections_from_layout_lines(layout_lines, target_date)
+    except MenuNotFoundError:
+        print(f"No menu found for {target_date.isoformat()}. Skipping notification.")
+        return 0
+
     message = format_meal_sections_message(target_date, sections)
     send_line_message(channel_access_token, message)
     return 0
