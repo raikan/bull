@@ -14,6 +14,16 @@ from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 DATE_SPLITTER_PATTERN = re.compile(r"(?<!\d)(?:\d{1,2}/\d{1,2}|\d{1,2}月\d{1,2}日|\d{1,2}日)(?:\s*[（(][月火水木金土日][）)])?")
+LAYOUT_DATE_PATTERN = re.compile(r"^\s*(\d{1,2})\s+([月火水木金土日])\b")
+JAPANESE_SPACE_PATTERN = re.compile(r"(?<=[ぁ-んァ-ン一-龠])\s+(?=[ぁ-んァ-ン一-龠])")
+MEAL_SECTION_ORDER = ("朝おやつ", "昼食", "午後おやつ", "延長おやつ")
+LAYOUT_COLUMN_SLICES = {
+    "朝おやつ": (5, 20),
+    "昼食": (20, 44),
+    "午後おやつ": (44, 82),
+    "3色分類": (82, 159),
+    "延長おやつ": (159, None),
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -67,6 +77,17 @@ def extract_pdf_text(pdf_path: Path) -> str:
     for page in reader.pages:
         pages.append(page.extract_text() or "")
     return "\n".join(pages)
+
+
+def extract_pdf_layout_lines(pdf_path: Path) -> list[str]:
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(pdf_path))
+    lines: list[str] = []
+    for page in reader.pages:
+        text = page.extract_text(extraction_mode="layout") or ""
+        lines.extend(line.rstrip() for line in text.splitlines() if line.strip())
+    return lines
 
 
 def normalize_line(line: str) -> str:
@@ -156,6 +177,70 @@ def extract_menu_text(text: str, target_date: date, max_lines: int = 3) -> str:
     raise RuntimeError(f"Menu for {target_date.isoformat()} was not found in the PDF.")
 
 
+def normalize_layout_item(item: str) -> str:
+    compact = JAPANESE_SPACE_PATTERN.sub("", item)
+    compact = re.sub(r"\s+", " ", compact).strip()
+    return compact.replace("ほう じ茶", "ほうじ茶")
+
+
+def split_layout_segment(segment: str) -> list[str]:
+    cleaned = segment.rstrip()
+    if not cleaned:
+        return []
+    parts = re.split(r"\s{2,}", cleaned)
+    items = [normalize_layout_item(part) for part in parts]
+    return [item for item in items if item]
+
+
+def extract_meal_sections_from_layout_lines(lines: list[str], target_date: date) -> dict[str, list[str]]:
+    target_weekday = "月火水木金土日"[target_date.weekday()]
+    date_line_indexes = [
+        index
+        for index, line in enumerate(lines)
+        if (match := LAYOUT_DATE_PATTERN.match(line))
+        and int(match.group(1)) == target_date.day
+        and match.group(2) == target_weekday
+    ]
+
+    if not date_line_indexes:
+        raise RuntimeError(f"Menu for {target_date.isoformat()} was not found in the PDF layout.")
+
+    date_line_index = date_line_indexes[0]
+    next_date_line_index = next(
+        (index for index in range(date_line_index + 1, len(lines)) if LAYOUT_DATE_PATTERN.match(lines[index])),
+        len(lines),
+    )
+    block_start = max(0, date_line_index - 1)
+    block_end = max(block_start, next_date_line_index - 1)
+    block_lines = lines[block_start:block_end]
+
+    sections = {name: [] for name in MEAL_SECTION_ORDER}
+    for line_index, line in enumerate(block_lines):
+        if line_index == 0:
+            sections["朝おやつ"].extend(
+                split_layout_segment(line[LAYOUT_COLUMN_SLICES["朝おやつ"][0] : LAYOUT_COLUMN_SLICES["朝おやつ"][1]])
+            )
+            sections["昼食"].extend(
+                split_layout_segment(line[LAYOUT_COLUMN_SLICES["昼食"][0] : LAYOUT_COLUMN_SLICES["3色分類"][0]])
+            )
+            sections["延長おやつ"].extend(split_layout_segment(line[LAYOUT_COLUMN_SLICES["延長おやつ"][0] :]))
+            continue
+
+        for section_name in MEAL_SECTION_ORDER:
+            start, end = LAYOUT_COLUMN_SLICES[section_name]
+            segment = line[start:end] if end is not None else line[start:]
+            sections[section_name].extend(split_layout_segment(segment))
+
+    for section_name in MEAL_SECTION_ORDER:
+        deduped: list[str] = []
+        for item in sections[section_name]:
+            if item not in deduped:
+                deduped.append(item)
+        sections[section_name] = deduped
+
+    return sections
+
+
 def format_menu_message(target_date: date, menu: str) -> str:
     weekday = "月火水木金土日"[target_date.weekday()]
     menu_lines = [line.strip().lstrip("・- ") for line in menu.splitlines() if line.strip()]
@@ -163,6 +248,19 @@ def format_menu_message(target_date: date, menu: str) -> str:
         raise RuntimeError("Menu text is empty.")
     body = "\n".join(f"・{line}" for line in menu_lines)
     return f"【今日の給食】{target_date.strftime('%Y-%m-%d')}（{weekday}）\n{body}"
+
+
+def format_meal_sections_message(target_date: date, sections: dict[str, list[str]]) -> str:
+    weekday = "月火水木金土日"[target_date.weekday()]
+    parts = [f"【今日の給食】{target_date.strftime('%Y-%m-%d')}（{weekday}）"]
+
+    for section_name in MEAL_SECTION_ORDER:
+        items = sections.get(section_name, [])
+        body = items or ["なし"]
+        parts.append(section_name)
+        parts.extend(f"・{item}" for item in body)
+
+    return "\n".join(parts)
 
 
 def send_line_message(channel_access_token: str, message: str) -> None:
@@ -198,17 +296,17 @@ def main() -> int:
 
     pdf_path = resolve_local_pdf_path(local_pdf_path)
     if pdf_path is not None:
-        text = extract_pdf_text(pdf_path)
+        layout_lines = extract_pdf_layout_lines(pdf_path)
     elif pdf_url:
         with tempfile.TemporaryDirectory() as temp_dir:
             downloaded_pdf_path = Path(temp_dir) / "menu.pdf"
             download_pdf(pdf_url, downloaded_pdf_path)
-            text = extract_pdf_text(downloaded_pdf_path)
+            layout_lines = extract_pdf_layout_lines(downloaded_pdf_path)
     else:
         raise RuntimeError("No PDF source was found. Set MENU_PDF_URL or commit a PDF to menus/latest.pdf.")
 
-    menu = extract_menu_text(text, target_date)
-    message = format_menu_message(target_date, menu)
+    sections = extract_meal_sections_from_layout_lines(layout_lines, target_date)
+    message = format_meal_sections_message(target_date, sections)
     send_line_message(channel_access_token, message)
     return 0
 

@@ -54,6 +54,45 @@ class FormatMenuMessageTests(unittest.TestCase):
             "【今日の給食】2026-04-15（水）\n・ごはん\n・鶏の唐揚げ\n・味噌汁",
         )
 
+    def test_formats_meal_sections_message(self) -> None:
+        message = notify_daily_menu.format_meal_sections_message(
+            date(2026, 4, 17),
+            {
+                "朝おやつ": ["蒸しかぼちゃ", "牛乳"],
+                "昼食": ["ご飯", "パイナップル", "ヨーグルト(苺)", "ワンタンスープ", "麻婆豆腐", "カリカリしらすともやしの和え物"],
+                "午後おやつ": ["ほうじ茶", "ウエハース"],
+                "延長おやつ": ["ぽたぽた焼き", "ほうじ茶"],
+            },
+        )
+
+        self.assertEqual(
+            message,
+            "【今日の給食】2026-04-17（金）\n"
+            "朝おやつ\n・蒸しかぼちゃ\n・牛乳\n"
+            "昼食\n・ご飯\n・パイナップル\n・ヨーグルト(苺)\n・ワンタンスープ\n・麻婆豆腐\n・カリカリしらすともやしの和え物\n"
+            "午後おやつ\n・ほうじ茶\n・ウエハース\n"
+            "延長おやつ\n・ぽたぽた焼き\n・ほうじ茶",
+        )
+
+
+class LayoutMealParsingTests(unittest.TestCase):
+    def test_extracts_four_meal_sections_from_layout_lines(self) -> None:
+        lines = [
+            "     蒸しかぼちゃ         ご飯                      パイナップル                 ヨーグルト(苺)       牛乳、木綿豆腐、豚肉、減塩み           米、ワンタン、ごま油、三温糖、片          かぼちゃ、干ししいたけ、水菜、人",
+            "17 金 牛乳             ワンタンスープ                 ほうじ茶                   ウエハース          そ、しらす、ヨーグルト（苺)           栗粉、ウエハース                  参、長ねぎ、しょうが、にんにく、も         ぽたぽた焼き",
+            "                    麻婆豆腐                                           ほう じ茶                                                              やし、ほうれん草、パイナップル           ほうじ茶",
+            "                    カリカリしらすともやしの和え物",
+            "     ハイハイン          焼きそば                                           ビスケット          牛乳、豚肉                    ハイハイン、蒸し中華麺、油、三温          キャベツ、玉ねぎ、人参、青のり、",
+            "18 土 牛乳             かぼちゃとしめじの甘辛和え                                  牛乳                                      糖、マリービスケット                南瓜、しめじ、オレンジ               味しらべ",
+        ]
+
+        sections = notify_daily_menu.extract_meal_sections_from_layout_lines(lines, date(2026, 4, 17))
+
+        self.assertEqual(sections["朝おやつ"], ["蒸しかぼちゃ", "牛乳"])
+        self.assertEqual(sections["昼食"], ["ご飯", "パイナップル", "ヨーグルト(苺)", "ワンタンスープ", "麻婆豆腐", "カリカリしらすともやしの和え物"])
+        self.assertEqual(sections["午後おやつ"], ["ほうじ茶", "ウエハース"])
+        self.assertEqual(sections["延長おやつ"], ["ぽたぽた焼き", "ほうじ茶"])
+
 
 class ResolvePdfPathTests(unittest.TestCase):
     def test_prefers_local_pdf_when_present(self) -> None:
