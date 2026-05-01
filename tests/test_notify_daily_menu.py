@@ -109,6 +109,28 @@ class LayoutMealParsingTests(unittest.TestCase):
         self.assertEqual(sections["午後おやつ"], ["ヨーグルト(苺)", "ほうじ茶", "ウエハース"])
         self.assertEqual(sections["延長おやつ"], ["ぽたぽた焼き", "ほうじ茶"])
 
+    def test_extracts_four_meal_sections_with_may_column_layout(self) -> None:
+        lines = [
+            "     蒸しさつま芋         【立夏・こどもの日】赤飯           デコポン                  ヨーグルト          牛乳、小豆、かつお節、鮭、減塩          さつま芋、米、もち米、ごま、じゃが        昆布、干ししいたけ、たけのこ、わ",
+            "1  金 牛乳             若竹汁                    お茶                    ウエハース          みそ、鶏肉、ヨーグルト              いも、三温糖、マヨドレ、ウエハー         かめ、万能ねぎ、しょうが、アスパ         ぽたぽた焼き",
+            "                    鮭の西京焼き                                       お茶                                      ス                        ラガス、人参、デコポン              ほうじ茶",
+            "                    アスパラとじゃがいものごまマヨ和え",
+            "     ハイハイン          豚肉とほうれん草のうどん                                 ソフトサラダせんべい     牛乳、豚肉                    ハイハイン、うどん、マヨドレ、三温        ほうれん草、人参、白菜、長ねぎ、",
+            "2  土 牛乳             かぼちゃのマヨ和え                                    牛乳                                      糖、マリービスケット                南瓜、しめじ、オレンジ               味しらべ",
+        ]
+
+        sections = notify_daily_menu.extract_meal_sections_from_layout_lines(lines, date(2026, 5, 1))
+
+        self.assertEqual(sections["朝おやつ"], ["蒸しさつま芋", "牛乳"])
+        self.assertIn("若竹汁", sections["昼食"])
+        self.assertIn("鮭の西京焼き", sections["昼食"])
+        self.assertIn("アスパラとじゃがいものごまマヨ和え", sections["昼食"])
+        self.assertNotIn("お", sections["昼食"])
+        self.assertNotIn("みそ", sections["午後おやつ"])
+        self.assertIn("ヨーグルト", sections["午後おやつ"])
+        self.assertIn("ウエハース", sections["午後おやつ"])
+        self.assertEqual(sections["延長おやつ"], ["ぽたぽた焼き", "ほうじ茶"])
+
     def test_raises_menu_not_found_when_date_is_missing(self) -> None:
         lines = [
             "17 金 牛乳             ワンタンスープ                 ほうじ茶                   ウエハース",
