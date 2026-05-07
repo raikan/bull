@@ -26,6 +26,8 @@ LAYOUT_COLUMN_SLICES = {
     "3色分類": (82, 159),
     "延長おやつ": (159, None),
 }
+THREE_COLOR_START_TOLERANCE = 4
+EXTENSION_TAIL_MIN_GAP = 5
 
 
 class MenuNotFoundError(RuntimeError):
@@ -235,7 +237,12 @@ def resolve_lunch_afternoon_boundary(line: str, boundary: int) -> int:
 
 
 def resolve_three_color_start(line: str, default_start: int) -> int:
-    candidates = [match.start() for match in re.finditer(r"[ぁ-んァ-ン一-龠]{1,4}、", line) if match.start() >= default_start - 4]
+    # 3色分類は「牛乳、」「みそ、」のように食材名+読点の並びで始まることが多いため、その開始位置を手がかりにする。
+    candidates = [
+        match.start()
+        for match in re.finditer(r"[ぁ-んァ-ン一-龠]{1,4}、", line)
+        if match.start() >= default_start - THREE_COLOR_START_TOLERANCE
+    ]
     if candidates:
         return candidates[0]
     return min(default_start, len(line))
@@ -258,7 +265,7 @@ def extract_extension_items(line: str, fallback_start: int) -> list[str]:
         cursor -= 1
 
     tail_items = split_layout_segment(trimmed[start:])
-    if gap >= 5 and tail_items and all(is_snack_item(item) or is_beverage_item(item) for item in tail_items):
+    if gap >= EXTENSION_TAIL_MIN_GAP and tail_items and all(is_snack_item(item) or is_beverage_item(item) for item in tail_items):
         return tail_items
     return fallback_items
 
