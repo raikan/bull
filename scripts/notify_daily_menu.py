@@ -223,6 +223,46 @@ def remove_first(items: list[str], target: str) -> list[str]:
     return updated
 
 
+def resolve_lunch_afternoon_boundary(line: str, boundary: int) -> int:
+    adjusted = min(boundary, len(line))
+    while (
+        0 < adjusted < len(line)
+        and not line[adjusted - 1].isspace()
+        and not line[adjusted].isspace()
+    ):
+        adjusted += 1
+    return adjusted
+
+
+def resolve_three_color_start(line: str, default_start: int) -> int:
+    candidates = [match.start() for match in re.finditer(r"[ぁ-んァ-ン一-龠]{1,4}、", line) if match.start() >= default_start - 4]
+    if candidates:
+        return candidates[0]
+    return min(default_start, len(line))
+
+
+def extract_extension_items(line: str, fallback_start: int) -> list[str]:
+    fallback_items = split_layout_segment(line[fallback_start:])
+    trimmed = line.rstrip()
+    if not trimmed:
+        return fallback_items
+
+    start = len(trimmed)
+    while start > 0 and not trimmed[start - 1].isspace():
+        start -= 1
+
+    gap = 0
+    cursor = start - 1
+    while cursor >= 0 and trimmed[cursor].isspace():
+        gap += 1
+        cursor -= 1
+
+    tail_items = split_layout_segment(trimmed[start:])
+    if gap >= 5 and tail_items and all(is_snack_item(item) or is_beverage_item(item) for item in tail_items):
+        return tail_items
+    return fallback_items
+
+
 def extract_meal_sections_from_layout_lines(lines: list[str], target_date: date) -> dict[str, list[str]]:
     target_weekday = "月火水木金土日"[target_date.weekday()]
     date_line_indexes = [
@@ -248,23 +288,26 @@ def extract_meal_sections_from_layout_lines(lines: list[str], target_date: date)
 
     sections = {name: [] for name in MEAL_SECTION_ORDER}
     for line_index, line in enumerate(block_lines):
+        lunch_afternoon_boundary = resolve_lunch_afternoon_boundary(line, LAYOUT_COLUMN_SLICES["午後おやつ"][0])
+        three_color_start = resolve_three_color_start(line, LAYOUT_COLUMN_SLICES["3色分類"][0])
+
         if line_index == 0:
             sections["朝おやつ"].extend(
                 split_layout_segment(line[LAYOUT_COLUMN_SLICES["朝おやつ"][0] : LAYOUT_COLUMN_SLICES["朝おやつ"][1]])
             )
-            sections["昼食"].extend(
-                split_layout_segment(line[LAYOUT_COLUMN_SLICES["昼食"][0] : LAYOUT_COLUMN_SLICES["3色分類"][0]])
-            )
+            sections["昼食"].extend(split_layout_segment(line[LAYOUT_COLUMN_SLICES["昼食"][0] : three_color_start]))
             first_line_afternoon_candidates = split_layout_segment(
-                line[LAYOUT_COLUMN_SLICES["午後おやつ"][0] : LAYOUT_COLUMN_SLICES["午後おやつ"][1]]
+                line[lunch_afternoon_boundary:three_color_start]
             )
-            sections["延長おやつ"].extend(split_layout_segment(line[LAYOUT_COLUMN_SLICES["延長おやつ"][0] :]))
+            sections["延長おやつ"].extend(extract_extension_items(line, LAYOUT_COLUMN_SLICES["延長おやつ"][0]))
             continue
 
-        for section_name in MEAL_SECTION_ORDER:
-            start, end = LAYOUT_COLUMN_SLICES[section_name]
-            segment = line[start:end] if end is not None else line[start:]
-            sections[section_name].extend(split_layout_segment(segment))
+        sections["朝おやつ"].extend(
+            split_layout_segment(line[LAYOUT_COLUMN_SLICES["朝おやつ"][0] : LAYOUT_COLUMN_SLICES["朝おやつ"][1]])
+        )
+        sections["昼食"].extend(split_layout_segment(line[LAYOUT_COLUMN_SLICES["昼食"][0] : lunch_afternoon_boundary]))
+        sections["午後おやつ"].extend(split_layout_segment(line[lunch_afternoon_boundary:three_color_start]))
+        sections["延長おやつ"].extend(extract_extension_items(line, LAYOUT_COLUMN_SLICES["延長おやつ"][0]))
 
     for section_name in MEAL_SECTION_ORDER:
         deduped: list[str] = []

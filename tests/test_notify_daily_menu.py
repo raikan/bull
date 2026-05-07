@@ -137,6 +137,24 @@ class LayoutMealParsingTests(unittest.TestCase):
         self.assertEqual(sections["午後おやつ"][:2], ["ビスケット", "牛乳"])
         self.assertEqual(sections["延長おやつ"], ["味しらべ", "ほうじ茶"])
 
+    def test_extracts_items_in_correct_sections_when_extension_column_starts_early(self) -> None:
+        lines = [
+            "                    オレンジポンチ",
+            "     バナナ　           三色そぼろ丼                 お茶                    ヨーグルト          牛乳、豚ひき肉、鶏卵、木綿豆腐、         米、三温糖、油、ウエハース            バナナ、しょうが、ほうれん草、昆",
+            "8  金 牛乳             すまし汁                                         ウエハース          減塩みそ、チーズ、ヨーグルト                                    布、干ししいたけ、しめじ、チンゲ         ぽたぽた焼き",
+            "                    野菜の梅味噌和え                                     お茶                                                               ン菜、ねりうめ、人参、キャベツ、         ほうじ茶",
+            "                    チーズ                                                                                                           れんこん",
+            "     ハイハイン          醤油ラーメン                                       ソフトサラダせんべい     牛乳、豚肉                    ハイハイン、中華麺、油、さつま          玉ねぎ、もやし、人参、チンゲン",
+            "9  土 牛乳             さつまいもとしめじの甘辛和え                               牛乳                                      芋、三温糖、せんべい               菜、にんにく、しょうが、昆布、長ね        味しらべ",
+        ]
+
+        sections = notify_daily_menu.extract_meal_sections_from_layout_lines(lines, date(2026, 5, 8))
+
+        self.assertEqual(sections["朝おやつ"], ["バナナ", "牛乳"])
+        self.assertEqual(sections["昼食"], ["三色そぼろ丼", "お茶", "すまし汁", "野菜の梅味噌和え", "チーズ"])
+        self.assertEqual(sections["午後おやつ"], ["ヨーグルト", "ウエハース", "お茶"])
+        self.assertEqual(sections["延長おやつ"], ["ぽたぽた焼き", "ほうじ茶"])
+
 
 class ResolvePdfPathTests(unittest.TestCase):
     def test_prefers_local_pdf_when_present(self) -> None:
