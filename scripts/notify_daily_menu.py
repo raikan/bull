@@ -27,7 +27,11 @@ LAYOUT_COLUMN_SLICES = {
     "延長おやつ": (159, None),
 }
 THREE_COLOR_START_TOLERANCE = 4
+THREE_COLOR_MAX_DRIFT = 8
 EXTENSION_TAIL_MIN_GAP = 5
+EXTENSION_EARLY_START_TOLERANCE = 12
+EXTENSION_NON_SNACK_MIN_LENGTH = 4
+NOISE_ITEMS = {"平均"}
 
 
 class MenuNotFoundError(RuntimeError):
@@ -240,8 +244,8 @@ def resolve_three_color_start(line: str, default_start: int) -> int:
     # 3色分類は「牛乳、」「みそ、」のように食材名+読点の並びで始まることが多いため、その開始位置を手がかりにする。
     candidates = [
         match.start()
-        for match in re.finditer(r"[ぁ-んァ-ン一-龠]{1,4}、", line)
-        if match.start() >= default_start - THREE_COLOR_START_TOLERANCE
+        for match in re.finditer(r"[ぁ-んァ-ヶー一-龠]{1,6}、", line)
+        if default_start - THREE_COLOR_START_TOLERANCE <= match.start() <= default_start + THREE_COLOR_MAX_DRIFT
     ]
     if candidates:
         return candidates[0]
@@ -265,9 +269,62 @@ def extract_extension_items(line: str, fallback_start: int) -> list[str]:
         cursor -= 1
 
     tail_items = split_layout_segment(trimmed[start:])
-    if gap >= EXTENSION_TAIL_MIN_GAP and tail_items and all(is_snack_item(item) or is_beverage_item(item) for item in tail_items):
+    early_start_threshold = max(0, fallback_start - EXTENSION_EARLY_START_TOLERANCE)
+    if (
+        start >= early_start_threshold
+        and gap >= EXTENSION_TAIL_MIN_GAP
+        and tail_items
+        and all(is_snack_item(item) or is_beverage_item(item) for item in tail_items)
+    ):
+        return tail_items
+    if (
+        start >= early_start_threshold
+        and gap >= EXTENSION_TAIL_MIN_GAP
+        and len(tail_items) == 1
+        and len(tail_items[0]) >= EXTENSION_NON_SNACK_MIN_LENGTH
+    ):
         return tail_items
     return fallback_items
+
+
+def is_noise_item(item: str) -> bool:
+    stripped = item.strip()
+    if not stripped:
+        return True
+    if stripped in NOISE_ITEMS:
+        return True
+    if re.fullmatch(r"\d+(?:\.\d+)?", stripped):
+        return True
+    if re.fullmatch(r"[A-Za-zＡ-Ｚａ-ｚ]", stripped):
+        return True
+    if "歳以上児" in stripped:
+        return True
+    if len(stripped) == 1 and not is_beverage_item(stripped):
+        return True
+    if stripped.endswith("、"):
+        return True
+    if stripped.count("（") != stripped.count("）") or stripped.count("(") != stripped.count(")"):
+        return True
+    return False
+
+
+def clean_section_items(section_name: str, items: list[str]) -> list[str]:
+    cleaned = [item for item in items if not is_noise_item(item)]
+
+    if section_name in {"午後おやつ", "延長おやつ"}:
+        cleaned = [item for item in cleaned if len(item) > 2 or is_beverage_item(item) or is_snack_item(item)]
+
+    filtered: list[str] = []
+    for item in cleaned:
+        if (
+            len(item) <= 3
+            and not is_beverage_item(item)
+            and not is_snack_item(item)
+            and any(item != other and item in other for other in cleaned)
+        ):
+            continue
+        filtered.append(item)
+    return filtered
 
 
 def extract_meal_sections_from_layout_lines(lines: list[str], target_date: date) -> dict[str, list[str]]:
@@ -341,6 +398,9 @@ def extract_meal_sections_from_layout_lines(lines: list[str], target_date: date)
                 moved.append(item)
         if moved:
             sections["午後おやつ"] = moved + sections["午後おやつ"]
+
+    for section_name in MEAL_SECTION_ORDER:
+        sections[section_name] = clean_section_items(section_name, sections[section_name])
 
     return sections
 
