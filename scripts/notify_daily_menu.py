@@ -301,9 +301,11 @@ def is_noise_item(item: str) -> bool:
         return True
     if len(stripped) == 1 and not is_beverage_item(stripped):
         return True
-    if stripped.endswith("、"):
+    if stripped.endswith("、") and len(stripped) <= 4:
         return True
-    if stripped.count("（") != stripped.count("）") or stripped.count("(") != stripped.count(")"):
+    total_open = stripped.count("（") + stripped.count("(")
+    total_close = stripped.count("）") + stripped.count(")")
+    if total_open != total_close:
         return True
     return False
 
