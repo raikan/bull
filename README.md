@@ -1,6 +1,11 @@
 # bull
 
-GitHub Actions で毎朝 6 時半に PDF の給食献立表から当日の献立を抽出し、LINE に通知する仕組みです。
+GitHub Actions から LINE に通知する小さな自動化置き場です。
+
+現状は次の 2 つに対応しています。
+
+- 給食献立 PDF から当日メニューを抽出して通知
+- JR北海道 学園都市線の遅延・運休情報を監視して通知
 
 LINE への通知は、LINE公式アカウントを友だち追加している相手全員へのブロードキャスト配信です。
 
@@ -11,14 +16,25 @@ LINE への通知は、LINE公式アカウントを友だち追加している�
 - `.github/workflows/notify-daily-menu.yml`
   - 毎日 6:30 JST (`21:30 UTC`) に実行
   - 手動実行 (`workflow_dispatch`) にも対応
+- `.github/workflows/notify-train-delay.yml`
+  - 10分ごとに実行
+  - 遅延・運休などが検知されたときだけ LINE に通知
+  - 前回と同じ障害内容は再通知しない
 - `scripts/notify_daily_menu.py`
   - 保存済み PDF を優先して読み込み
   - 必要なら URL から PDF を取得
   - テキストを抽出
   - 当日の日付に対応する行を見つけて献立を組み立て
   - LINE Messaging API で通知
+- `scripts/notify_train_delay.py`
+  - 運行情報ページを取得
+  - 学園都市線/札沼線に関する文言を抽出
+  - 遅延・運休・運転見合わせなどを検知
+  - 同じ内容の重複通知を抑止
 - `tests/test_notify_daily_menu.py`
   - 日付抽出と通知整形の最小テスト
+- `tests/test_notify_train_delay.py`
+  - 運行情報の判定と重複通知抑止のテスト
 
 ## 事前準備
 
@@ -47,6 +63,32 @@ LINE Notify は終了済みのため、LINE Messaging API を使います。
 - `MENU_PDF_PATH`
   - 既定値: `menus/latest.pdf`
 
+### 2. JR北海道 遅延通知の設定
+
+学園都市線の遅延通知でも同じ `LINE_CHANNEL_ACCESS_TOKEN` を使います。
+
+必要に応じて GitHub Secrets で次を設定できます。
+
+- `TRAIN_STATUS_URLS`
+  - 運行情報ページの URL 一覧
+  - 改行またはカンマ区切り
+  - 未設定時は以下を順に参照
+    - `https://www3.jrhokkaido.co.jp/webunkou/`
+    - `https://transit.yahoo.co.jp/diainfo/12/0`
+- `TRAIN_STATUS_TIMEZONE`
+  - 既定値: `Asia/Tokyo`
+- `TRAIN_LINE_NAME`
+  - 通知見出しに出す路線名
+  - 既定値: `学園都市線`
+- `TRAIN_LINE_ALIASES`
+  - ページ上で検索する路線名候補
+  - 既定値: `学園都市線,札沼線`
+- `TRAIN_COMMUTE_SECTION`
+  - 通知見出しに付ける区間名
+  - 既定値: `拓北〜札幌`
+
+同じ遅延内容が継続している間は、GitHub Actions の cache に前回状態を保存して重複通知を避けます。
+
 ## 月次 PDF の更新方法
 
 1. コドモンから月次の献立 PDF をダウンロードする
@@ -64,6 +106,13 @@ Actions の `Notify Daily Menu` ワークフローから手動実行できます
   - `YYYY-MM-DD` 形式で対象日を指定
 - `menu_pdf_url`
   - 保存済み PDF を使わず、一時的に別 PDF を試したい場合に指定
+
+`Notify Train Delay` ワークフローも手動実行できます。
+
+- `force_notify`
+  - `true` にすると、前回と同じ障害内容でも通知
+- `status_urls`
+  - 一時的に参照先 URL を差し替えたいときに指定
 
 ## PDF 形式の前提
 
@@ -91,6 +140,15 @@ Actions の `Notify Daily Menu` ワークフローから手動実行できます
 ```
 
 日曜日や休園日などで当日の献立が PDF に見つからない場合は、LINE は送信せず、その日の workflow は正常終了します。
+
+学園都市線で遅延や運休が検知された場合は、次のような形式で送信します。
+
+```text
+【JR北海道 運行情報】学園都市線（拓北〜札幌）
+学園都市線は強風の影響で遅れが発生しています。
+確認時刻: 2026-05-08 08:10
+取得元: https://www3.jrhokkaido.co.jp/webunkou/
+```
 
 ## ローカル確認
 

@@ -1,0 +1,62 @@
+name: Notify Train Delay
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      force_notify:
+        description: "Force notification even if the last delay summary is unchanged"
+        required: false
+        default: "false"
+        type: string
+      status_urls:
+        description: "Override status URLs (comma or newline separated)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: notify-train-delay
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Restore last train status state
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/train-delay-state.json
+          key: ${{ runner.os }}-train-delay-state-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ runner.os }}-train-delay-state-
+
+      - name: Notify train delay
+        env:
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          TRAIN_STATUS_URLS: ${{ inputs.status_urls || secrets.TRAIN_STATUS_URLS || '' }}
+          TRAIN_STATUS_TIMEZONE: ${{ secrets.TRAIN_STATUS_TIMEZONE || 'Asia/Tokyo' }}
+          TRAIN_LINE_NAME: ${{ secrets.TRAIN_LINE_NAME || '学園都市線' }}
+          TRAIN_LINE_ALIASES: ${{ secrets.TRAIN_LINE_ALIASES || '学園都市線,札沼線' }}
+          TRAIN_COMMUTE_SECTION: ${{ secrets.TRAIN_COMMUTE_SECTION || '拓北〜札幌' }}
+          TRAIN_STATUS_STATE_PATH: .cache/train-delay-state.json
+          TRAIN_FORCE_NOTIFY: ${{ inputs.force_notify || 'false' }}
+        run: python scripts/notify_train_delay.py
+
+      - name: Save train status state
+        if: ${{ hashFiles('.cache/train-delay-state.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/train-delay-state.json
+          key: ${{ runner.os }}-train-delay-state-${{ github.run_id }}-${{ github.run_attempt }}
