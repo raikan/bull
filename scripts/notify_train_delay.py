@@ -8,6 +8,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from html import unescape
 from pathlib import Path
+from typing import Mapping
+from urllib.parse import urlparse
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
@@ -77,8 +79,8 @@ def classify_state(text: str) -> str | None:
 
 
 def strip_html_tags(html: str) -> list[str]:
-    without_scripts = re.sub(r"(?is)<script.*?>.*?</script>", " ", html)
-    without_styles = re.sub(r"(?is)<style.*?>.*?</style>", " ", without_scripts)
+    without_scripts = re.sub(r"(?is)<script\b[^>]*>.*?</script\s*>", " ", html)
+    without_styles = re.sub(r"(?is)<style\b[^>]*>.*?</style\s*>", " ", without_scripts)
     text = re.sub(r"(?is)<[^>]+>", "\n", without_styles)
     return [normalize_text(line) for line in unescape(text).splitlines() if normalize_text(line)]
 
@@ -134,10 +136,17 @@ def parse_train_status(html: str, line_aliases: tuple[str, ...], source_url: str
     )
 
 
+def validate_http_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise RuntimeError(f"Unsupported URL: {url}")
+
+
 def fetch_url(url: str) -> str:
+    validate_http_url(url)
     request = Request(url, headers={"User-Agent": "bull-train-delay-notifier/1.0"})
     try:
-        with urlopen(request, timeout=30) as response:  # noqa: S310
+        with urlopen(request, timeout=30) as response:  # noqa: S310 - validated http/https URL
             if response.status != 200:
                 raise RuntimeError(f"HTTP {response.status}")
             body = response.read()
@@ -191,7 +200,8 @@ def is_truthy(value: str) -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
 
 
-def should_notify(current: TrainStatus, previous: dict[str, str], force_notify: bool = False) -> bool:
+def should_notify(current: TrainStatus, previous: Mapping[str, str] | None, force_notify: bool = False) -> bool:
+    previous = previous or {}
     if current.state != "delay":
         return False
     if force_notify:
@@ -227,7 +237,7 @@ def send_line_message(channel_access_token: str, message: str) -> None:
         method="POST",
     )
     try:
-        with urlopen(request) as response:  # noqa: S310
+        with urlopen(request, timeout=30) as response:  # noqa: S310 - fixed LINE Messaging API endpoint
             if response.status >= 400:
                 raise RuntimeError(f"LINE API returned HTTP {response.status}")
     except HTTPError as exc:
