@@ -140,8 +140,22 @@ def fetch_url(url: str) -> str:
         with urlopen(request, timeout=30) as response:  # noqa: S310
             if response.status != 200:
                 raise RuntimeError(f"HTTP {response.status}")
-            charset = response.headers.get_content_charset() or "utf-8"
-            return response.read().decode(charset, errors="ignore")
+            body = response.read()
+            charsets = [
+                response.headers.get_content_charset(),
+                "utf-8",
+                "cp932",
+                "shift_jis",
+                "euc-jp",
+            ]
+            for charset in charsets:
+                if not charset:
+                    continue
+                try:
+                    return body.decode(charset)
+                except UnicodeDecodeError:
+                    continue
+            return body.decode("utf-8", errors="ignore")
     except HTTPError as exc:
         raise RuntimeError(f"HTTP {exc.code}") from exc
     except URLError as exc:
@@ -231,10 +245,8 @@ def main() -> int:
     force_notify = is_truthy(optional_env("TRAIN_FORCE_NOTIFY"))
 
     status_urls = resolve_status_urls(
-        os.getenv(
-            "TRAIN_STATUS_URLS",
-            "https://www3.jrhokkaido.co.jp/webunkou/\nhttps://transit.yahoo.co.jp/diainfo/12/0",
-        )
+        optional_env("TRAIN_STATUS_URLS")
+        or "https://www3.jrhokkaido.co.jp/webunkou/\nhttps://transit.yahoo.co.jp/diainfo/12/0"
     )
     if not status_urls:
         raise RuntimeError("TRAIN_STATUS_URLS must contain at least one URL.")
