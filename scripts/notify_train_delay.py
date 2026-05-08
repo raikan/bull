@@ -7,7 +7,9 @@ import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from html import unescape
+from html.parser import HTMLParser
 from pathlib import Path
+from types import MappingProxyType
 from typing import Mapping
 from urllib.parse import urlparse
 from urllib.error import HTTPError, URLError
@@ -37,6 +39,7 @@ DISRUPTION_MARKERS = (
     "運転を取りやめ",
     "運転再開",
 )
+EMPTY_STATE: Mapping[str, str] = MappingProxyType({})
 
 
 @dataclass
@@ -45,6 +48,25 @@ class TrainStatus:
     summary: str
     source_url: str
     checked_at: str
+
+
+class VisibleTextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.skip_depth = 0
+        self.lines: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in {"script", "style"}:
+            self.skip_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in {"script", "style"} and self.skip_depth > 0:
+            self.skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self.skip_depth == 0:
+            self.lines.append(data)
 
 
 def require_env(name: str) -> str:
@@ -79,10 +101,9 @@ def classify_state(text: str) -> str | None:
 
 
 def strip_html_tags(html: str) -> list[str]:
-    without_scripts = re.sub(r"(?is)<script\b[^>]*>.*?</script\s*>", " ", html)
-    without_styles = re.sub(r"(?is)<style\b[^>]*>.*?</style\s*>", " ", without_scripts)
-    text = re.sub(r"(?is)<[^>]+>", "\n", without_styles)
-    return [normalize_text(line) for line in unescape(text).splitlines() if normalize_text(line)]
+    parser = VisibleTextExtractor()
+    parser.feed(html)
+    return [normalize_text(line) for line in parser.lines if normalize_text(line)]
 
 
 def extract_metadata_candidates(html: str) -> list[str]:
@@ -200,8 +221,7 @@ def is_truthy(value: str) -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
 
 
-def should_notify(current: TrainStatus, previous: Mapping[str, str] | None, force_notify: bool = False) -> bool:
-    previous = previous or {}
+def should_notify(current: TrainStatus, previous: Mapping[str, str] = EMPTY_STATE, force_notify: bool = False) -> bool:
     if current.state != "delay":
         return False
     if force_notify:
