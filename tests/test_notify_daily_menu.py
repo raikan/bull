@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
@@ -188,6 +189,48 @@ class ResolvePdfPathTests(unittest.TestCase):
         resolved = notify_daily_menu.resolve_local_pdf_path("menus/missing.pdf")
 
         self.assertIsNone(resolved)
+
+    def test_prefers_same_month_uploaded_pdf_when_latest_is_outdated(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            menus_dir = Path(temp_dir)
+            latest = menus_dir / "latest.pdf"
+            august = menus_dir / "august-upload.pdf"
+            latest.write_bytes(b"latest")
+            august.write_bytes(b"august")
+
+            fake_months = {
+                latest.resolve(): (7, 1000),
+                august.resolve(): (8, 1000),
+            }
+
+            def fake_extract_target_month(path: Path) -> tuple[int, int] | None:
+                return fake_months.get(path.resolve())
+
+            with patch.object(notify_daily_menu, "extract_target_month", side_effect=fake_extract_target_month):
+                resolved = notify_daily_menu.resolve_menu_pdf_path(str(latest), date(2026, 8, 1))
+
+            self.assertEqual(resolved, august)
+
+    def test_keeps_latest_when_it_matches_target_month(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            menus_dir = Path(temp_dir)
+            latest = menus_dir / "latest.pdf"
+            august = menus_dir / "august-upload.pdf"
+            latest.write_bytes(b"latest")
+            august.write_bytes(b"august")
+
+            fake_months = {
+                latest.resolve(): (8, 1000),
+                august.resolve(): (8, 1000),
+            }
+
+            def fake_extract_target_month(path: Path) -> tuple[int, int] | None:
+                return fake_months.get(path.resolve())
+
+            with patch.object(notify_daily_menu, "extract_target_month", side_effect=fake_extract_target_month):
+                resolved = notify_daily_menu.resolve_menu_pdf_path(str(latest), date(2026, 8, 1))
+
+            self.assertEqual(resolved, latest)
 
 
 if __name__ == "__main__":

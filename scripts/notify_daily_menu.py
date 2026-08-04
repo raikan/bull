@@ -87,6 +87,45 @@ def resolve_local_pdf_path(local_pdf_path: str) -> Path | None:
     return None
 
 
+def extract_target_month(pdf_path: Path) -> tuple[int, int] | None:
+    from pypdf import PdfReader
+
+    reader = PdfReader(str(pdf_path))
+    for page in reader.pages[:1]:
+        text = page.extract_text() or ""
+        match = re.search(r"令和\d+年\s*(\d{1,2})月予定献立表", text)
+        if match:
+            return int(match.group(1)), len(text)
+    return None
+
+
+def resolve_menu_pdf_path(local_pdf_path: str, target_date: date) -> Path | None:
+    primary = resolve_local_pdf_path(local_pdf_path)
+    menus_dir = Path(local_pdf_path).expanduser().resolve().parent
+    candidates: list[Path] = []
+    if primary is not None:
+        candidates.append(primary)
+    if menus_dir.is_dir():
+        for candidate in sorted(menus_dir.glob("*.pdf")):
+            if candidate not in candidates:
+                candidates.append(candidate)
+
+    target_month_candidates: list[Path] = []
+    for candidate in candidates:
+        try:
+            target_month = extract_target_month(candidate)
+        except Exception:
+            continue
+        if target_month and target_month[0] == target_date.month:
+            target_month_candidates.append(candidate)
+
+    if target_month_candidates:
+        if primary in target_month_candidates:
+            return primary
+        return max(target_month_candidates, key=lambda path: path.stat().st_mtime)
+    return primary
+
+
 def extract_pdf_text(pdf_path: Path) -> str:
     from pypdf import PdfReader
 
@@ -460,7 +499,7 @@ def main() -> int:
     local_pdf_path = os.getenv("MENU_PDF_PATH", "menus/latest.pdf")
     channel_access_token = require_env("LINE_CHANNEL_ACCESS_TOKEN")
 
-    pdf_path = resolve_local_pdf_path(local_pdf_path)
+    pdf_path = resolve_menu_pdf_path(local_pdf_path, target_date)
     if pdf_path is not None:
         layout_lines = extract_pdf_layout_lines(pdf_path)
     elif pdf_url:
